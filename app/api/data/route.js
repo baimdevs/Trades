@@ -1,29 +1,38 @@
-// File: app/api/data/route.js
-import { kv } from '@vercel/kv';
+import { get } from '@vercel/edge-config';
 import { NextResponse } from 'next/server';
 
-export async function GET() {
-  // Ambil data akun dari server Vercel
-  const data = await kv.get('nexus_terminal_data');
-  
-  // Jika ini pertama kali banget (database masih kosong), set data awal Sultan
-  const defaultData = data || {
-    balanceUSD: 384950.00,
-    nxsHolding: 4250.75,
-    transactions: [
-      { id: 1, type: 'Deposit P2P Node', amount: '+1,500 NXS', status: 'Success', date: '2026-06-20' }
-    ]
-  };
+// Penyimpanan sementara di memori server Vercel
+let memoryStorage = null;
 
-  return NextResponse.json(defaultData);
+export async function GET() {
+  try {
+    if (memoryStorage) {
+      return NextResponse.json(memoryStorage);
+    }
+
+    const backupData = await get('nexus_terminal_data');
+    
+    const defaultData = backupData || {
+      balanceUSD: 384950.00,
+      nxsHolding: 4250.75,
+      transactions: [
+        { id: 1, type: 'Deposit P2P Node', amount: '+1,500 NXS', status: 'Success', date: '2026-06-20 14:24' }
+      ]
+    };
+
+    memoryStorage = defaultData;
+    return NextResponse.json(defaultData);
+  } catch (error) {
+    return NextResponse.json({ error: "Gagal membaca database Edge" }, { status: 500 });
+  }
 }
 
 export async function POST(request) {
-  const body = await request.json();
-  
-  // Simpan data terbaru ke database Vercel
-  await kv.set('nexus_terminal_data', body);
-  
-  return NextResponse.json({ success: true });
+  try {
+    const body = await request.json();
+    memoryStorage = body; // Update memori runtime server
+    return NextResponse.json({ success: true });
+  } catch (error) {
+    return NextResponse.json({ error: "Gagal memperbarui data" }, { status: 500 });
+  }
 }
-  
